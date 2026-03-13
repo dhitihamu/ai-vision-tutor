@@ -425,22 +425,42 @@
             }
         }
 
-        cameraBtn.onclick = () => {
+        cameraBtn.onclick = async () => {
             if (!localStream) return;
-            const videoTrack = localStream.getVideoTracks()[0];
             
-            if (videoTrack) {
-                isCameraOn = !isCameraOn;
-                videoTrack.enabled = isCameraOn; 
+            if (isCameraOn) {
+                isCameraOn = false;
+                const videoTracks = localStream.getVideoTracks();
+                videoTracks.forEach(track => {
+                    track.stop(); 
+                    localStream.removeTrack(track);
+                });
                 
-                if (isCameraOn) {
+                cameraBtn.innerHTML = '<i class="fa-solid fa-video"></i> Resume Camera';
+                cameraBtn.classList.add("off");
+                pausedOverlay.style.display = "flex";
+            } else {
+                cameraBtn.disabled = true;
+                try {
+                    const newStream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: currentFacingMode } 
+                    });
+                    
+                    const newVideoTrack = newStream.getVideoTracks()[0];
+                    localStream.addTrack(newVideoTrack);
+                    isCameraOn = true;
+                    
+                    videoPreview.srcObject = localStream; 
+                    updateVideoMirroring();
+                    
                     cameraBtn.innerHTML = '<i class="fa-solid fa-video-slash"></i> Pause Camera';
                     cameraBtn.classList.remove("off");
                     pausedOverlay.style.display = "none";
-                } else {
-                    cameraBtn.innerHTML = '<i class="fa-solid fa-video"></i> Resume Camera';
-                    cameraBtn.classList.add("off");
-                    pausedOverlay.style.display = "flex";
+                } catch (err) {
+                    console.error("Failed to resume camera:", err);
+                    updateStatus('error', 'Failed to resume camera');
+                } finally {
+                    cameraBtn.disabled = false;
                 }
             }
         };
@@ -450,6 +470,8 @@
             if (!localStream) return;
             
             currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+            
+            if (!isCameraOn) return; 
             
             const oldVideoTracks = localStream.getVideoTracks();
             oldVideoTracks.forEach(track => {
@@ -463,13 +485,9 @@
                 });
                 
                 const newVideoTrack = newStream.getVideoTracks()[0];
-                
-                newVideoTrack.enabled = isCameraOn;
-                
                 localStream.addTrack(newVideoTrack);
                 
                 updateVideoMirroring();
-                
                 videoPreview.srcObject = localStream;
             } catch (err) {
                 console.error("Failed to switch camera:", err);
